@@ -13,94 +13,23 @@
     .resistance { background: #552222; }
     .support { background: #225522; }
     .price { background: #444466; font-weight: bold; color: #fff; }
-
-    input { margin: 3px; padding: 3px 5px; width: 70px; background:#222; color:#eee; border:1px solid #555; font-size: 12px; }
-    button { margin: 5px; padding: 4px 8px; background:#333; color:#eee; border:1px solid #555; cursor:pointer; font-size: 12px; display:inline-block; }
-
-    /* Highlight class for alerts */
-    .highlight {
-      background-color: yellow !important;
-      color: black !important;
-    }
+    .highlight { background-color: yellow !important; color: black !important; }
 
     #alertsWrapper {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      background: #1e1e1e;
-      padding: 10px;
+      position: fixed; bottom: 0; left: 0; width: 100%;
+      background: #1e1e1e; padding: 10px;
       box-shadow: 0 -2px 6px rgba(0,0,0,0.5);
-      max-height: 180px;
-      overflow-y: auto;
+      max-height: 180px; overflow-y: auto;
     }
-    #alertsTable {
-      border-collapse: collapse;
-      width: 100%;
-    }
+    #alertsTable { border-collapse: collapse; width: 100%; }
     #alertsTable th, #alertsTable td {
-      border: 1px solid #444;
-      padding: 6px;
-      text-align: center;
-      font-size: 12px;
+      border: 1px solid #444; padding: 6px; text-align: center; font-size: 12px;
     }
-    #alertsTable th {
-      background: #222;
-      color: #fff;
-    }
-
-    .inputs { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
-    .ticker-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .ticker-row label { width: 50px; color: #fff; font-weight: bold; }
-    .current-inline { margin-left: 8px; font-size: 11px; color: #9ecfff; }
+    #alertsTable th { background: #222; color: #fff; }
   </style>
 </head>
 <body>
-  <h1>Fibonacci Pivot Levels (Dark Mode + Inline Inputs + Scrollable Alerts)</h1>
-
-  <h2>Manual Input</h2>
-  <div class="inputs">
-    <div class="ticker-row">
-      <label>AAPL</label>
-      High: <input id="AAPL_high" type="number" step="0.01" value="273.33">
-      Low: <input id="AAPL_low" type="number" step="0.01" value="265.67">
-      Close: <input id="AAPL_close" type="number" step="0.01" value="271.49">
-      Current: <input id="AAPL_current" type="number" step="0.01">
-      <span id="AAPL_current_display" class="current-inline">Current: --</span>
-    </div>
-
-    <div class="ticker-row">
-      <label>AMD</label>
-      High: <input id="AMD_high" type="number" step="0.01" value="208.83">
-      Low: <input id="AMD_low" type="number" step="0.01" value="195.00">
-      Close: <input id="AMD_close" type="number" step="0.01" value="203.78">
-      Current: <input id="AMD_current" type="number" step="0.01">
-      <span id="AMD_current_display" class="current-inline">Current: --</span>
-    </div>
-
-    <div class="ticker-row">
-      <label>NVDA</label>
-      High: <input id="NVDA_high" type="number" step="0.01" value="184.56">
-      Low: <input id="NVDA_low" type="number" step="0.01" value="172.93">
-      Close: <input id="NVDA_close" type="number" step="0.01" value="178.88">
-      Current: <input id="NVDA_current" type="number" step="0.01">
-      <span id="NVDA_current_display" class="current-inline">Current: --</span>
-    </div>
-
-    <div class="ticker-row">
-      <label>TSLA</label>
-      High: <input id="TSLA_high" type="number" step="0.01" value="401.35">
-      Low: <input id="TSLA_low" type="number" step="0.01" value="384.85">
-      Close: <input id="TSLA_close" type="number" step="0.01" value="391.09">
-      Current: <input id="TSLA_current" type="number" step="0.01">
-      <span id="TSLA_current_display" class="current-inline">Current: --</span>
-    </div>
-
-    <div>
-      <button onclick="calculateAll()">Calculate</button>
-      <button onclick="resetAlerts()">Reset Alerts</button>
-    </div>
-  </div>
+  <h1>Fibonacci Pivot Levels (Auto Yahoo Fetch + Alerts)</h1>
 
   <h2>Results</h2>
   <div class="container" id="tables"></div>
@@ -159,106 +88,99 @@
       return html;
     }
 
-    function calculateAll() {
-      let output = "";
-      for (const t of tickers) {
-        const high = parseFloat(document.getElementById(t+"_high").value);
-        const low = parseFloat(document.getElementById(t+"_low").value);
-                const close = parseFloat(document.getElementById(t+"_close").value);
-        if (!isNaN(high) && !isNaN(low) && !isNaN(close)) {
-          const levels = calculateLevels(high, low, close);
-          output += renderTable(t, levels);
-        }
-      }
-      document.getElementById("tables").innerHTML = output;
-      updateSlider(); // initial update
+    async function fetchOHLC(symbol) {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=2d&interval=1d`;
+      const data = await proxyFetch(url);
+      const result = data.chart.result[0];
+      const ohlc = result.indicators.quote[0];
+      const idx = 0; // yesterday
+      return {
+        high: ohlc.high[idx],
+        low: ohlc.low[idx],
+        close: ohlc.close[idx]
+      };
     }
 
     async function fetchCurrentPrice(symbol) {
-      try {
-        const url = `https://query1.finance.yahoo.com/v7/finance/chart/${symbol}?interval=1m&range=1d`;
-        const data = await proxyFetch(url);
-        const result = data?.chart?.result?.[0];
-        const closes = result?.indicators?.quote?.[0]?.close || [];
-        for (let i = closes.length - 1; i >= 0; i--) {
-          if (closes[i] != null) return closes[i];
-        }
-        return null;
-      } catch (e) {
-        console.warn("API fetch failed for", symbol, e);
-        return null;
+      const url = `https://query1.finance.yahoo.com/v7/finance/chart/${symbol}?interval=1m&range=1d`;
+      const data = await proxyFetch(url);
+      const result = data?.chart?.result?.[0];
+      const closes = result?.indicators?.quote?.[0]?.close || [];
+      for (let i = closes.length - 1; i >= 0; i--) {
+        if (closes[i] != null) return closes[i];
       }
+      return null;
     }
 
     async function updateSlider() {
       for (const t of tickers) {
-        const high = parseFloat(document.getElementById(t+"_high").value);
-        const low = parseFloat(document.getElementById(t+"_low").value);
-        const close = parseFloat(document.getElementById(t+"_close").value);
-        if (isNaN(high) || isNaN(low) || isNaN(close)) continue;
+        try {
+          const ohlc = await fetchOHLC(t);
+          const levels = calculateLevels(ohlc.high, ohlc.low, ohlc.close);
+          const price = await fetchCurrentPrice(t);
+          if (price == null) continue;
 
-        const levels = calculateLevels(high, low, close);
+          // Render table if not already
+          if (!document.getElementById(`table_${t}`)) {
+            document.getElementById("tables").innerHTML += renderTable(t, levels);
+          }
 
-        const manualCurrent = parseFloat(document.getElementById(t+"_current").value);
-        let price = !isNaN(manualCurrent) ? manualCurrent : await fetchCurrentPrice(t);
-        if (price == null) continue;
+          const table = document.getElementById(`table_${t}`);
+          if (!table) continue;
 
-        document.getElementById(`${t}_current_display`).textContent = `Current: ${Number(price).toFixed(2)}`;
+          const oldRow = document.getElementById(`priceRow_${t}`);
+          if (oldRow) oldRow.remove();
 
-        const table = document.getElementById(`table_${t}`);
-        if (!table) continue;
-
-        const oldRow = document.getElementById(`priceRow_${t}`);
-        if (oldRow) oldRow.remove();
-
-        let entries = Object.entries(levels).sort((a,b) => parseFloat(b[1]) - parseFloat(a[1]));
-        let inserted = false;
-        for (let i = 0; i < entries.length; i++) {
-          const levelPrice = parseFloat(entries[i][1]);
-          const nextPrice = i+1 < entries.length ? parseFloat(entries[i+1][1]) : null;
-          if (price <= levelPrice && (nextPrice === null || price > nextPrice)) {
-            const row = table.insertRow(i+2);
+          let entries = Object.entries(levels).sort((a,b) => parseFloat(b[1]) - parseFloat(a[1]));
+          let inserted = false;
+          for (let i = 0; i < entries.length; i++) {
+            const levelPrice = parseFloat(entries[i][1]);
+            const nextPrice = i+1 < entries.length ? parseFloat(entries[i+1][1]) : null;
+            if (price <= levelPrice && (nextPrice === null || price > nextPrice)) {
+              const row = table.insertRow(i+2);
+              row.id = `priceRow_${t}`;
+              row.className = "price";
+              row.innerHTML = `<td>Current</td><td>${Number(price).toFixed(2)}</td>`;
+              inserted = true;
+              break;
+            }
+          }
+          if (!inserted) {
+            const row = table.insertRow(1);
             row.id = `priceRow_${t}`;
             row.className = "price";
             row.innerHTML = `<td>Current</td><td>${Number(price).toFixed(2)}</td>`;
-            inserted = true;
-            break;
           }
-        }
-        if (!inserted) {
-          const row = table.insertRow(1);
-          row.id = `priceRow_${t}`;
-          row.className = "price";
-          row.innerHTML = `<td>Current</td><td>${Number(price).toFixed(2)}</td>`;
-        }
 
-        const rows = table.rows;
-        for (let r = 1; r < rows.length; r++) {
-          const row = rows[r];
-          if (row.id === `priceRow_${t}`) continue;
-          const cell = row.cells[1];
-          if (!cell) continue;
-          const levelPrice = parseFloat(cell.innerText);
-          const levelName = row.cells[0].innerText;
-          if (!isNaN(levelPrice)) {
-            const alertKey = `${t}_${levelName}`;
-            if (Math.abs(price - levelPrice) <= 1.00) {
-              row.classList.add("highlight");
-              if (!firedAlerts.has(alertKey)) {
-                firedAlerts.add(alertKey);
-                const alertsTable = document.getElementById("alertsTable");
-                const newRow = alertsTable.insertRow(-1);
-                const timestamp = new Date().toLocaleTimeString();
-                newRow.innerHTML = `<td>${t}</td><td>${levelName}</td><td>${levelPrice.toFixed(2)}</td><td>${timestamp}</td>`;
-                if ("Notification" in window && Notification.permission === "granted") {
-                  new Notification(`ALERT: ${t}`, {
-                    body: `Price ${Number(price).toFixed(2)} near ${levelName} (${levelPrice.toFixed(2)})`,
-                    icon: "https://static.thenounproject.com/png/2045037-200.png"
-                  });
+          // Highlight alerts
+          const rows = table.rows;
+          for (let r = 1; r < rows.length; r++) {
+            const row = rows[r];
+            if (row.id === `priceRow_${t}`) continue;
+            const cell = row.cells[1];
+            if (!cell) continue;
+            const levelPrice = parseFloat(cell.innerText);
+            const levelName = row.cells[0].innerText;
+            if (!isNaN(levelPrice)) {
+              const alertKey = `${t}_${levelName}`;
+              if (Math.abs(price - levelPrice) <= 1.00) {
+                row.classList.add("highlight");
+                if (!firedAlerts.has(alertKey)) {
+                  firedAlerts.add(alertKey);
+                  const alertsTable = document.getElementById("alertsTable");
+                  const newRow = alertsTable.insertRow(-1);
+                  const timestamp = new Date().toLocaleTimeString();
+                  newRow.innerHTML = `<td>${t}</td><td>${levelName}</td><td>${levelPrice.toFixed(2)}</td><td>${timestamp}</td>`;
+                  if ("Notification" in window && Notification.permission === "granted") {
+                    new Notification(`ALERT: ${t}`, {
+                      body: `Price ${Number(price).toFixed(2)} near ${levelName} (${levelPrice.toFixed(2)})`,
+                      icon: "https://static.thenounproject                      .com/png/2045037-200.png"
+                    });
+                  }
                 }
+              } else {
+                row.classList.remove("highlight");
               }
-            } else {
-              row.classList.remove("highlight");
             }
           }
         }
@@ -266,7 +188,6 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-      calculateAll();
       (async function loop() {
         await updateSlider();
         setTimeout(loop, 5000); // refresh every 5 seconds
