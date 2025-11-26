@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title></title>
+  <title>Camarilla Dashboard</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #121212; color: #e0e0e0; }
     .container { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 40px; }
@@ -15,10 +15,7 @@
     .price { background: #444466; font-weight: bold; color: #fff; }
     .highlight { background-color: yellow !important; color: black !important; }
 
-    #alertsWrapper {
-      background: #1e1e1e; padding: 10px;
-      margin-top: 30px;
-    }
+    #alertsWrapper { background: #1e1e1e; padding: 10px; margin-top: 30px; }
     #alertsTable { border-collapse: collapse; width: 100%; }
     #alertsTable th, #alertsTable td {
       border: 1px solid #444; padding: 6px; text-align: center; font-size: 12px;
@@ -72,7 +69,7 @@
       return fetch(proxyUrl).then(res => res.json());
     }
 
-    // Camarilla pivot calculation (simplified: Pivot, R3, R4, S3, S4)
+    // Camarilla pivot calculation (Pivot, R3, R4, S3, S4 + OHLC + Mid)
     function calculateLevels(high, low, close) {
       const range = high - low;
       const pivot = (high + low + close) / 3;
@@ -90,16 +87,27 @@
     }
 
     function renderTable(symbol, levels) {
+      // Collect all levels into an array
+      const allLevels = [
+        { name: "High", value: parseFloat(levels.High), cls: "" },
+        { name: "Low", value: parseFloat(levels.Low), cls: "" },
+        { name: "Close", value: parseFloat(levels.Close), cls: "" },
+        { name: "Mid", value: parseFloat(levels.Mid), cls: "" },
+        { name: "Pivot", value: parseFloat(levels.Pivot), cls: "pivot" },
+        { name: "R3", value: parseFloat(levels.R3), cls: "resistance" },
+        { name: "R4", value: parseFloat(levels.R4), cls: "resistance" },
+        { name: "S3", value: parseFloat(levels.S3), cls: "support" },
+        { name: "S4", value: parseFloat(levels.S4), cls: "support" }
+      ];
+
+      // Sort all levels by price descending
+      allLevels.sort((a, b) => b.value - a.value);
+
+      // Build table
       let html = `<table id="table_${symbol}"><tr><th>${symbol}</th><th>Price</th></tr>`;
-      html += `<tr><td>High</td><td>${levels.High}</td></tr>`;
-      html += `<tr><td>Low</td><td>${levels.Low}</td></tr>`;
-      html += `<tr><td>Close</td><td>${levels.Close}</td></tr>`;
-      html += `<tr><td>Mid</td><td>${levels.Mid}</td></tr>`;
-      html += `<tr class="pivot"><td>Pivot</td><td>${levels.Pivot}</td></tr>`;
-      html += `<tr class="resistance"><td>R3</td><td>${levels.R3}</td></tr>`;
-      html += `<tr class="resistance"><td>R4</td><td>${levels.R4}</td></tr>`;
-      html += `<tr class="support"><td>S3</td><td>${levels.S3}</td></tr>`;
-      html += `<tr class="support"><td>S4</td><td>${levels.S4}</td></tr>`;
+      for (const lvl of allLevels) {
+        html += `<tr class="${lvl.cls}"><td>${lvl.name}</td><td>${lvl.value.toFixed(2)}</td></tr>`;
+      }
       html += "</table>";
       return html;
     }
@@ -159,7 +167,7 @@
           if (!inserted) {
             const row = table.insertRow(1);
             row.id = `priceRow_${t}`;
-            row.className = "price";
+                        row.className = "price";
             row.innerHTML = `<td>Current</td><td>${Number(price).toFixed(2)}</td>`;
           }
 
@@ -168,7 +176,7 @@
             const row = rows[r];
             if (row.id === `priceRow_${t}`) continue;
             const cell = row.cells[1];
-                       if (!cell) continue;
+            if (!cell) continue;
             const levelPrice = parseFloat(cell.innerText);
             const levelName = row.cells[0].innerText;
             if (!isNaN(levelPrice)) {
@@ -192,7 +200,7 @@
                 row.classList.remove("highlight");
               }
             }
-          } // <-- loop closes here
+          } // loop closes here
         } catch (err) {
           console.error("Error updating", t, err);
         }
