@@ -163,52 +163,54 @@
             row.innerHTML = `<td>Current</td><td>${Number(price).toFixed(2)}</td>`;
           }
 
-                   const row = rows[r];
-          if (row.id === `priceRow_${t}`) continue;
-          const cell = row.cells[1];
-          if (!cell) continue;
-          const levelPrice = parseFloat(cell.innerText);
-          const levelName = row.cells[0].innerText;
-          if (!isNaN(levelPrice)) {
-            const alertKey = `${t}_${levelName}`;
-            if (Math.abs(price - levelPrice) <= 1.00) {
-              row.classList.add("highlight");
-              if (!firedAlerts.has(alertKey)) {
-                firedAlerts.add(alertKey);
-                const alertsTable = document.getElementById("alertsTable");
-                const newRow = alertsTable.insertRow(-1);
-                const timestamp = new Date().toLocaleTimeString();
-                newRow.innerHTML = `<td>${t}</td><td>${levelName}</td><td>${levelPrice.toFixed(2)}</td><td>${timestamp}</td>`;
-                if ("Notification" in window && Notification.permission === "granted") {
-                  new Notification(`ALERT: ${t}`, {
-                    body: `Price ${Number(price).toFixed(2)} near ${levelName} (${levelPrice.toFixed(2)})`,
-                    icon: "https://static.thenounproject.com/png/2045037-200.png"
-                  });
+          const rows = table.rows;
+          for (let r = 1; r < rows.length; r++) {
+            const row = rows[r];
+            if (row.id === `priceRow_${t}`) continue;
+            const cell = row.cells[1];
+                       if (!cell) continue;
+            const levelPrice = parseFloat(cell.innerText);
+            const levelName = row.cells[0].innerText;
+            if (!isNaN(levelPrice)) {
+              const alertKey = `${t}_${levelName}`;
+              if (Math.abs(price - levelPrice) <= 1.00) {
+                row.classList.add("highlight");
+                if (!firedAlerts.has(alertKey)) {
+                  firedAlerts.add(alertKey);
+                  const alertsTable = document.getElementById("alertsTable");
+                  const newRow = alertsTable.insertRow(-1);
+                  const timestamp = new Date().toLocaleTimeString();
+                  newRow.innerHTML = `<td>${t}</td><td>${levelName}</td><td>${levelPrice.toFixed(2)}</td><td>${timestamp}</td>`;
+                  if ("Notification" in window && Notification.permission === "granted") {
+                    new Notification(`ALERT: ${t}`, {
+                      body: `Price ${Number(price).toFixed(2)} near ${levelName} (${levelPrice.toFixed(2)})`,
+                      icon: "https://static.thenounproject.com/png/2045037-200.png"
+                    });
+                  }
                 }
+              } else {
+                row.classList.remove("highlight");
               }
-            } else {
-              row.classList.remove("highlight");
             }
-          }
+          } // <-- loop closes here
+        } catch (err) {
+          console.error("Error updating", t, err);
         }
-      } catch (err) {
-        console.error("Error updating", t, err);
       }
     }
-  }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    (async function loop() {
-      await updateSlider();
-      setTimeout(loop, 5000); // refresh every 5 seconds
-    })();
-  });
+    document.addEventListener("DOMContentLoaded", () => {
+      (async function loop() {
+        await updateSlider();
+        setTimeout(loop, 5000); // refresh every 5 seconds
+      })();
+    });
 
-  function resetAlerts() {
-    firedAlerts.clear();
-    const alertsTable = document.getElementById("alertsTable");
-    alertsTable.innerHTML = "<tr><th>Ticker</th><th>Level</th><th>Price</th><th>Time</th></tr>";
-  }
+    function resetAlerts() {
+      firedAlerts.clear();
+      const alertsTable = document.getElementById("alertsTable");
+      alertsTable.innerHTML = "<tr><th>Ticker</th><th>Level</th><th>Price</th><th>Time</th></tr>";
+    }
   </script>
 </body>
 </html>
