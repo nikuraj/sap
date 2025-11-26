@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Fibonacci Pivot Levels Dashboard</title>
+  <title>Fibonacci Pivot Levels + TradingView</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #121212; color: #e0e0e0; }
     .container { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 200px; }
@@ -26,13 +26,39 @@
       border: 1px solid #444; padding: 6px; text-align: center; font-size: 12px;
     }
     #alertsTable th { background: #222; color: #fff; }
+
+    .tv-container { margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h1>Fibonacci Pivot Levels (Auto Yahoo Fetch + Alerts)</h1>
+  <h1>Fibonacci Pivot Levels + TradingView Chart</h1>
 
   <h2>Results</h2>
   <div class="container" id="tables"></div>
+
+  <!-- TradingView Widget -->
+  <div class="tv-container">
+    <div class="tradingview-widget-container">
+      <div id="tradingview_chart"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+        new TradingView.widget({
+          "width": 980,
+          "height": 610,
+          "symbol": "NASDAQ:AAPL",
+          "interval": "D",
+          "timezone": "Etc/UTC",
+          "theme": "dark",
+          "style": "1",
+          "locale": "en",
+          "toolbar_bg": "#f1f3f6",
+          "enable_publishing": false,
+          "allow_symbol_change": true,
+          "container_id": "tradingview_chart"
+        });
+      </script>
+    </div>
+  </div>
 
   <div id="alertsWrapper">
     <h2>Alerts Log</h2>
@@ -120,7 +146,6 @@
           const price = await fetchCurrentPrice(t);
           if (price == null) continue;
 
-          // Render table if not already
           if (!document.getElementById(`table_${t}`)) {
             document.getElementById("tables").innerHTML += renderTable(t, levels);
           }
@@ -149,10 +174,9 @@
             const row = table.insertRow(1);
             row.id = `priceRow_${t}`;
             row.className = "price";
-            row.innerHTML = `<td>Current</td><td>${Number(price).toFixed(2)}</td>`;
+                        row.innerHTML = `<td>Current</td><td>${Number(price).toFixed(2)}</td>`;
           }
 
-          // Highlight alerts
           const rows = table.rows;
           for (let r = 1; r < rows.length; r++) {
             const row = rows[r];
@@ -174,7 +198,7 @@
                   if ("Notification" in window && Notification.permission === "granted") {
                     new Notification(`ALERT: ${t}`, {
                       body: `Price ${Number(price).toFixed(2)} near ${levelName} (${levelPrice.toFixed(2)})`,
-                      icon: "https://static.thenounproject                      .com/png/2045037-200.png"
+                      icon: "https://static.thenounproject.com/png/2045037-200.png"
                     });
                   }
                 }
@@ -183,6 +207,8 @@
               }
             }
           }
+        } catch (err) {
+          console.error("Error updating", t, err);
         }
       }
     }
@@ -202,3 +228,5 @@
   </script>
 </body>
 </html>
+
+              
