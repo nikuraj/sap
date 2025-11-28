@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Live ATR & Fib Pivot</title>
+<style>
+  body{background:#0f0f0f;color:#e5e5e5;font-family:Arial,Helvetica,sans-serif;padding:24px;margin:0}
+  h1{margin:6px 0 18px 0;font-size:20px;color:#ccc}
+  .wrap{display:flex;flex-direction:row;gap:20px;overflow-x:auto;padding-bottom:20px}
+  .card{min-width:360px;background:#1a1a1a;border-radius:8px;overflow:hidden;border:1px solid #222}
+  table{border-collapse:collapse;width:100%}
+  th,td{padding:10px 12px;border-bottom:1px solid #222;text-align:left}
+  th{background:#222;font-weight:600;text-transform:capitalize;color:#e6eef8}
+  tr:hover td{background:#111}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .red{background:#5a0000 !important;color:#fff}
+  .green{background:#004d00 !important;color:#fff}
+  h2{margin:12px;padding:12px 14px 0 14px;font-size:16px;color:#dfe7ee}
+</style>
+</head>
+<body>
+<h1>Live ATR / OHLC / Fibonacci Pivot — Horizontal Tables</h1>
+<div class="wrap" id="tables"></div>
+<script>
+const tickers = ["AAPL", "AMD", "AMZN", "NVDA", "COIN", "RDDT", "SNOW"];
+
+async function fetchOHLC(ticker){
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=15d`;
+  const res = await fetch(url);
+  const data = await res.json();
+  const quote = data.chart.result[0];
+  const timestamps = quote.timestamp;
+  const o = quote.indicators.quote[0].open;
+  const h = quote.indicators.quote[0].high;
+  const l = quote.indicators.quote[0].low;
+  const c = quote.indicators.quote[0].close;
+  return timestamps.map((t,i)=>({open:o[i],high:h[i],low:l[i],close:c[i]}));
+}
+
+function calculateATR(data){
+  const tr = [];
+  for(let i=1;i<data.length;i++){
+    const hi = data[i].high;
+    const lo = data[i].low;
+    const prevC = data[i-1].close;
+    tr.push(Math.max(hi-lo, Math.abs(hi-prevC), Math.abs(lo-prevC)));
+  }
+  const atr14 = tr.slice(-14).reduce((a,b)=>a+b,0)/14;
+  return atr14.toFixed(2);
+}
+
+function fibPivot(yest){
+  return ((yest.high+yest.low+yest.close)/3).toFixed(2);
+}
+
+function createCard(ticker, yest, today, atr, fib){
+  const card = document.createElement('div'); card.className='card';
+  const title = document.createElement('h2'); title.textContent = ticker; card.appendChild(title);
+  const table = document.createElement('table'); const tbody = document.createElement('tbody');
+  const rows = [
+    ['Field','Value'],
+    ['Price', today.close.toFixed(2)],
+    ['ATR (14)', atr],
+    ['Open', today.open.toFixed(2)],
+    ['High', today.high.toFixed(2)],
+    ['Low', today.low.toFixed(2)],
+    ['Close', today.close.toFixed(2)],
+    ['Fib Pivot', fib]
+  ];
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    const td0=document.createElement('td'); td0.textContent=r[0];
+    const td1=document.createElement('td'); td1.textContent=r[1]; td1.className='num';
+    if(r[0]==='High') td1.classList.add('high');
+    if(r[0]==='Low') td1.classList.add('low');
+    if(r[0]==='Fib Pivot') td1.classList.add('fib');
+    tr.appendChild(td0); tr.appendChild(td1); tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); card.appendChild(table); return card;
+}
+
+async function render(){
+  const container = document.getElementById('tables');
+  for(const t of tickers){
+    const data = await fetchOHLC(t);
+    const yest = data[data.length-2];
+    const today = data[data.length-1];
+    const atr = calculateATR(data);
+    const fib = fibPivot(yest);
+    const card = createCard(t,yest,today,atr,fib);
+    container.appendChild(card);
+
+    // Conditional coloring
+    const high = today.high, low = today.low;
+    const fibCell = card.querySelector('.fib');
+    if(high>fib && low>fib) fibCell.classList.add('red');
+    else if(high<fib && low<fib) fibCell.classList.add('green');
+  }
+}
+
+render();
+</script>
+</body>
+</html>
