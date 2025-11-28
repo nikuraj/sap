@@ -25,9 +25,10 @@
 const tickers = ["AAPL", "AMD", "AMZN", "NVDA", "COIN", "RDDT", "SNOW"];
 
 async function fetchOHLC(ticker){
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=15d`;
-  const res = await fetch(url);
-  const data = await res.json();
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/' + ticker + '?interval=1d&range=15d')}`;
+  const res = await fetch(proxyUrl);
+  const text = await res.text();
+  const data = JSON.parse(JSON.parse(text).contents);
   const quote = data.chart.result[0];
   const timestamps = quote.timestamp;
   const o = quote.indicators.quote[0].open;
@@ -82,19 +83,27 @@ function createCard(ticker, yest, today, atr, fib){
 async function render(){
   const container = document.getElementById('tables');
   for(const t of tickers){
-    const data = await fetchOHLC(t);
-    const yest = data[data.length-2];
-    const today = data[data.length-1];
-    const atr = calculateATR(data);
-    const fib = fibPivot(yest);
-    const card = createCard(t,yest,today,atr,fib);
-    container.appendChild(card);
+    try{
+      const data = await fetchOHLC(t);
+      const yest = data[data.length-2];
+      const today = data[data.length-1];
+      const atr = calculateATR(data);
+      const fib = fibPivot(yest);
+      const card = createCard(t,yest,today,atr,fib);
+      container.appendChild(card);
 
-    // Conditional coloring
-    const high = today.high, low = today.low;
-    const fibCell = card.querySelector('.fib');
-    if(high>fib && low>fib) fibCell.classList.add('red');
-    else if(high<fib && low<fib) fibCell.classList.add('green');
+      // Conditional coloring
+      const high = today.high, low = today.low;
+      const fibCell = card.querySelector('.fib');
+      if(high>fib && low>fib) fibCell.classList.add('red');
+      else if(high<fib && low<fib) fibCell.classList.add('green');
+    } catch(e){
+      console.error('Failed to fetch data for', t, e);
+      const card = document.createElement('div'); card.className='card';
+      const title = document.createElement('h2'); title.textContent = t; card.appendChild(title);
+      const errMsg = document.createElement('p'); errMsg.textContent='Data unavailable'; card.appendChild(errMsg);
+      container.appendChild(card);
+    }
   }
 }
 
