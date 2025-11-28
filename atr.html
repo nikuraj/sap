@@ -88,15 +88,21 @@ async function render(){
       const yest = data[data.length-2];
       const today = data[data.length-1];
       const atr = calculateATR(data);
-      const fib = fibPivot(yest);
+      const fib = parseFloat(fibPivot(yest));
       const card = createCard(t,yest,today,atr,fib);
       container.appendChild(card);
 
-      // Conditional coloring
-      const high = today.high, low = today.low;
+      // Explicit numeric comparison for Fib Pivot coloring
+      const high = parseFloat(today.high), low = parseFloat(today.low);
       const fibCell = card.querySelector('.fib');
-      if(high>fib && low>fib) fibCell.classList.add('red');
-      else if(high<fib && low<fib) fibCell.classList.add('green');
+      if(low > fib){
+        // Pivot below today's low → red
+        fibCell.classList.add('red');
+      } else if(high < fib){
+        // Pivot above today's high → green
+        fibCell.classList.add('green');
+      } // otherwise leave neutral
+
     } catch(e){
       console.error('Failed to fetch data for', t, e);
       const card = document.createElement('div'); card.className='card';
