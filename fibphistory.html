@@ -1,25 +1,27 @@
-          <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Fibonacci Pivot Dashboard</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #121212; color: #e0e0e0; }
+    h2 { margin-bottom: 10px; }
     .container { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 40px; }
-    table { border-collapse: collapse; margin: 10px 0; width: 240px; }
+    table { border-collapse: collapse; margin: 10px 0; width: 260px; }
     th, td { border: 1px solid #444; padding: 6px; text-align: center; }
     th { background: #333; color: #fff; }
     .pivot { background: #444; font-weight: bold; }
     .resistance { background: #552222; }
-    .support { background: #225522; }
+    .support { background: #99cc99; } /* light green */
     .price { background: #444466; font-weight: bold; color: #fff; }
-    .highlight { background-color: yellow !important; color: black !important; }
+    .highlight { background-color: #ffff99 !important; color: black !important; } /* lighter yellow */
 
+    .todayOpen { background: #666633; color: #fff; font-weight: bold; }
     .todayHigh { background: #004400; color: #fff; font-weight: bold; }
-    .todayLow { background: #440000; color: #fff; font-weight: bold; }
+    .todayLow  { background: #440000; color: #fff; font-weight: bold; }
     .band { background: #333366; }
     .pivotGreen { background: #006600 !important; color: #fff; }
-    .pivotRed { background: #660000 !important; color: #fff; }
+    .pivotRed   { background: #660000 !important; color: #fff; }
 
     #alertsWrapper { background: #1e1e1e; padding: 10px; margin-top: 30px; }
     #alertsTable { border-collapse: collapse; width: 100%; }
@@ -38,6 +40,7 @@
 </head>
 <body>
 
+  <h2 id="dateHeader"></h2>
   <div class="container" id="tables"></div>
 
   <!-- TradingView Widgets -->
@@ -57,12 +60,6 @@
 
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
   <script>
-    // TradingView charts
-    new TradingView.widget({ "width": 480, "height": 320, "symbol": "NASDAQ:AAPL", "interval": "D", "theme": "dark", "container_id": "tv_aapl" });
-    new TradingView.widget({ "width": 480, "height": 320, "symbol": "NASDAQ:AMD", "interval": "D", "theme": "dark", "container_id": "tv_amd" });
-    new TradingView.widget({ "width": 480, "height": 320, "symbol": "NASDAQ:NVDA", "interval": "D", "theme": "dark", "container_id": "tv_nvda" });
-    new TradingView.widget({ "width": 480, "height": 320, "symbol": "NASDAQ:TSLA", "interval": "D", "theme": "dark", "container_id": "tv_tsla" });
-
     const tickers = ["AAPL","AMD","NVDA","TSLA"];
     const firedAlerts = new Set();
 
@@ -75,142 +72,93 @@
       return fetch(proxyUrl).then(res => res.json());
     }
 
+    function safeToFixed(num, digits=2) {
+      const n = Number(num);
+      if (!isFinite(n)) return "-";
+      return n.toFixed(digits);
+    }
+
     // Fibonacci pivot calculation
     function calculateLevels(high, low, close) {
       const pp = (high + low + close) / 3;
       const range = high - low;
       return {
-        Pivot: pp.toFixed(2),
-        R1: (pp + range * 0.382).toFixed(2),
-        R2: (pp + range * 0.618).toFixed(2),
-        R3: (pp + range * 1.000).toFixed(2),
-        R4: (pp + range * 1.382).toFixed(2),
-        R5: (pp + range * 1.618).toFixed(2),
-        R6: (pp + range * 2.000).toFixed(2),
-        S1: (pp - range * 0.382).toFixed(2),
-        S2: (pp - range * 0.618).toFixed(2),
-        S3: (pp - range * 1.000).toFixed(2),
-        S4: (pp - range * 1.382).toFixed(2),
-        S5: (pp - range * 1.618).toFixed(2),
-        S6: (pp - range * 2.000).toFixed(2),
+        Pivot: safeToFixed(pp),
+        R1: safeToFixed(pp + range * 0.382),
+        R2: safeToFixed(pp + range * 0.618),
+        R3: safeToFixed(pp + range * 1.000),
+        R4: safeToFixed(pp + range * 1.382),
+        R5: safeToFixed(pp + range * 1.618),
+        R6: safeToFixed(pp + range * 2.000),
+        S1: safeToFixed(pp - range * 0.382),
+        S2: safeToFixed(pp - range * 0.618),
+        S3: safeToFixed(pp - range * 1.000),
+        S4: safeToFixed(pp - range * 1.382),
+        S5: safeToFixed(pp - range * 1.618),
+        S6: safeToFixed(pp - range * 2.000),
       };
     }
 
-    function renderTable(symbol, levels, todayHigh, todayLow) {
-      // Collect all levels + today’s High/Low
+    function renderTable(symbol, levels, todayOHLC, yesterdayClose) {
+      const gap = todayOHLC.open - yesterdayClose;
+      const gapText = (gap >= 0 ? "Gap Up: +" : "Gap Down: ") + safeToFixed(gap);
+
       let allLevels = Object.entries(levels).map(([key, val]) => {
+        const num = Number(val);
         let cls = "";
         if (key === "Pivot") cls = "pivot";
         else if (key.startsWith("R")) cls = "resistance";
         else if (key.startsWith("S")) cls = "support";
-        return { name: key, value: parseFloat(val), cls };
+        return { name: key, value: num, text: safeToFixed(num), cls };
       });
 
-      allLevels.push({ name: "Today High", value: todayHigh, cls: "todayHigh" });
-      allLevels.push({ name: "Today Low", value: todayLow, cls: "todayLow" });
+      allLevels.push({ name: "Today Open", value: todayOHLC.open, text: safeToFixed(todayOHLC.open), cls: "todayOpen" });
+      allLevels.push({ name: "Today High", value: todayOHLC.high, text: safeToFixed(todayOHLC.high), cls: "todayHigh" });
+      allLevels.push({ name: "Today Low",  value: todayOHLC.low,  text: safeToFixed(todayOHLC.low),  cls: "todayLow" });
 
-      // Sort all by price descending
+      allLevels = allLevels.filter(l => isFinite(l.value));
       allLevels.sort((a, b) => b.value - a.value);
 
-      // Build table
-      let html = `<table id="table_${symbol}"><tr><th>${symbol}</th><th>Price</th></tr>`;
+      let html = `<table id="table_${symbol}"><tr><th>${symbol}</th><th>${gapText}</th></tr>`;
       for (const lvl of allLevels) {
-        html += `<tr class="${lvl.cls}"><td>${lvl.name}</td><td>${lvl.value.toFixed(2)}</td></tr>`;
+        html += `<tr class="${lvl.cls}"><td>${lvl.name}</td><td>${lvl.text}</td></tr>`;
       }
       html += "</table>";
       return html;
     }
 
-    async function fetchOHLC(symbol) {
+    async function fetchDailyOHLC(symbol) {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=5d&interval=1d`;
       const data = await proxyFetch(url);
       const result = data.chart.result[0];
       const ohlc = result.indicators.quote[0];
-      const idx = result.timestamp.length - 2; // yesterday
-      return { high: ohlc.high[idx], low: ohlc.low[idx], close: ohlc.close[idx] };
-    }
-
-    async function fetchTodayHL(symbol) {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1d&interval=1d`;
-      const data = await proxyFetch(url);
-      const result = data.chart.result[0];
-      const ohlc = result.indicators.quote[0];
-      return { high: ohlc.high[0], low: ohlc.low[0] };
-    }
-
-    async function fetchCurrentPrice(symbol) {
-      const url = `https://query1.finance.yahoo.com/v7/finance/chart/${symbol}?interval=1m&range=1d`;
-      const data = await proxyFetch(url);
-      const result = data?.chart?.result?.[0];
-      const closes = result?.indicators?.quote?.[0]?.close || [];
-      for (let i = closes.length - 1; i >= 0; i--) {
-        if (closes[i] != null) return closes[i];
-      }
-      return null;
+      const len = result.timestamp.length;
+      const yesterdayIdx = len - 2;
+      const todayIdx = len - 1;
+      return {
+        yesterday: {
+          open: ohlc.open[yesterdayIdx],
+          high: ohlc.high[yesterdayIdx],
+          low: ohlc.low[yesterdayIdx],
+          close: ohlc.close[yesterdayIdx]
+        },
+        today: {
+          open: ohlc.open[todayIdx],
+          high: ohlc.high[todayIdx],
+          low: ohlc.low[todayIdx],
+          close: ohlc.close[todayIdx]
+        }
+      };
     }
 
     async function updateSlider() {
+      document.getElementById("tables").innerHTML = "";
       for (const t of tickers) {
         try {
-          const ohlc = await fetchOHLC(t);
-          const todayHL = await fetchTodayHL(t);
-          const levels = calculateLevels(ohlc.high, ohlc.low, ohlc.close);
-
-          const price = await fetchCurrentPrice(t);
-          if (price == null) continue;
-
-          // Render table with sorted levels + today’s High/Low
-          document.getElementById("tables").innerHTML += renderTable(t, levels, todayHL.high, todayHL.low);
-
-          const table = document.getElementById(`table_${t}`);
-          if (!table) continue;
-
-          // Insert current price row dynamically
-          const oldRow = document.getElementById(`priceRow_${t}`);
-          if (oldRow) oldRow.remove();
-
-          let rows = Array.from(table.rows).slice(1); // skip header
-          let inserted = false;
-          for (let i = 0; i < rows.length; i++) {
-            const val = parseFloat(rows[i].cells[1].innerText);
-            const nextVal = i+1 < rows.length ? parseFloat(rows[i+1].cells[1].innerText) : null;
-            if (price <= val && (nextVal === null || price > nextVal)) {
-              const row = table.insertRow(i+2);
-              row.id = `priceRow_${t}`;
-              row.className = "price";
-              row.innerHTML = `<td>Current</td><td>${Number(price).toFixed(2)}</td>`;
-              inserted = true;
-              break;
-            }
-          }
-          if (!inserted) {
-            const row = table.insertRow(1);
-            row.id = `priceRow_${t}`;
-            row.className = "price";
-            row.innerHTML = `<td>Current</td><td>${Number(price).toFixed(2)}</td>`;
-          }
-
-          // Highlight Pivot row based on today’s High/Low
-          for (let r = 1; r < table.rows.length; r++) {
-            const row = table.rows[r];
-            if (row.cells[0].innerText === "Pivot") {
-              const pivotVal = parseFloat(row.cells[1].innerText);
-              if (todayHL.high < pivotVal && todayHL.low < pivotVal) {
-                row.classList.add("pivotGreen");
-              } else if (todayHL.high > pivotVal && todayHL.low > pivotVal) {
-                row.classList.add("pivotRed");
-              }
-            }
-          }
-
-          // Shade band between today’s High and Low
-          for (let r = 1; r < table.rows.length; r++) {
-            const row = table.rows[r];
-            const val = parseFloat(row.cells[1].innerText);
-            if (val <= todayHL.high && val >= todayHL.low) {
-              row.classList.add("band");
-            }
-          }
+          const daily = await fetchDailyOHLC(t);
+          const levels = calculateLevels(daily.yesterday.high, daily.yesterday.low, daily.yesterday.close);
+          const tableHtml = renderTable(t, levels, daily.today, daily.yesterday.close);
+          document.getElementById("tables").innerHTML += tableHtml;
         } catch (err) {
           console.error("Error updating", t, err);
         }
@@ -218,6 +166,15 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+      const today = new Date();
+      const formattedToday = today.getFullYear() + "-" + String(today.getMonth()+1).padStart(2,"0") + "-" + String(today.getDate()).padStart(2,"0");
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const formattedYesterday = yesterday.getFullYear() + "-" + String(yesterday.getMonth()+1).padStart(2,"0") + "-" + String(yesterday.getDate()).padStart(2,"0");
+      document.getElementById("dateHeader").innerText = "Pivot Date: " + formattedYesterday + " | Today: " + formattedToday;
+
+      (async function loop() {
+        await updateSlider();
       (async function loop() {
         await updateSlider();
         setTimeout(loop, 5000); // refresh every 5 seconds
@@ -232,3 +189,5 @@
   </script>
 </body>
 </html>
+
+       
