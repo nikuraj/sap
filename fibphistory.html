@@ -1,11 +1,10 @@
-<!DOCTYPE html>
+          <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Fibonacci Pivot Dashboard</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #121212; color: #e0e0e0; }
-    h2 { margin-bottom: 10px; }
     .container { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 40px; }
     table { border-collapse: collapse; margin: 10px 0; width: 240px; }
     th, td { border: 1px solid #444; padding: 6px; text-align: center; }
@@ -39,7 +38,6 @@
 </head>
 <body>
 
-  <h2 id="dateHeader"></h2>
   <div class="container" id="tables"></div>
 
   <!-- TradingView Widgets -->
@@ -98,7 +96,8 @@
       };
     }
 
-    function renderTable(symbol, levels, todayHigh, todayLow, todayOpen) {
+    function renderTable(symbol, levels, todayHigh, todayLow) {
+      // Collect all levels + today’s High/Low
       let allLevels = Object.entries(levels).map(([key, val]) => {
         let cls = "";
         if (key === "Pivot") cls = "pivot";
@@ -107,13 +106,13 @@
         return { name: key, value: parseFloat(val), cls };
       });
 
-      allLevels.push({ name: "Today Open", value: todayOpen, cls: "" });
       allLevels.push({ name: "Today High", value: todayHigh, cls: "todayHigh" });
       allLevels.push({ name: "Today Low", value: todayLow, cls: "todayLow" });
 
       // Sort all by price descending
       allLevels.sort((a, b) => b.value - a.value);
 
+      // Build table
       let html = `<table id="table_${symbol}"><tr><th>${symbol}</th><th>Price</th></tr>`;
       for (const lvl of allLevels) {
         html += `<tr class="${lvl.cls}"><td>${lvl.name}</td><td>${lvl.value.toFixed(2)}</td></tr>`;
@@ -131,12 +130,12 @@
       return { high: ohlc.high[idx], low: ohlc.low[idx], close: ohlc.close[idx] };
     }
 
-    async function fetchTodayOHLC(symbol) {
+    async function fetchTodayHL(symbol) {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1d&interval=1d`;
       const data = await proxyFetch(url);
       const result = data.chart.result[0];
       const ohlc = result.indicators.quote[0];
-      return { open: ohlc.open[0], high: ohlc.high[0], low: ohlc.low[0] };
+      return { high: ohlc.high[0], low: ohlc.low[0] };
     }
 
     async function fetchCurrentPrice(symbol) {
@@ -153,15 +152,15 @@
     async function updateSlider() {
       for (const t of tickers) {
         try {
-          const ohlc = await fetchOHLC(t); // yesterday’s OHLC for pivots
-          const todayOHLC = await fetchTodayOHLC(t);
-                    const price = await fetchCurrentPrice(t);
+          const ohlc = await fetchOHLC(t);
+          const todayHL = await fetchTodayHL(t);
+          const levels = calculateLevels(ohlc.high, ohlc.low, ohlc.close);
+
+          const price = await fetchCurrentPrice(t);
           if (price == null) continue;
 
-          // Render table with sorted levels + today’s OHLC
-          document.getElementById("tables").innerHTML += renderTable(
-            t, levels, todayOHLC.high, todayOHLC.low, todayOHLC.open
-          );
+          // Render table with sorted levels + today’s High/Low
+          document.getElementById("tables").innerHTML += renderTable(t, levels, todayHL.high, todayHL.low);
 
           const table = document.getElementById(`table_${t}`);
           if (!table) continue;
@@ -196,9 +195,9 @@
             const row = table.rows[r];
             if (row.cells[0].innerText === "Pivot") {
               const pivotVal = parseFloat(row.cells[1].innerText);
-              if (todayOHLC.high < pivotVal && todayOHLC.low < pivotVal) {
+              if (todayHL.high < pivotVal && todayHL.low < pivotVal) {
                 row.classList.add("pivotGreen");
-              } else if (todayOHLC.high > pivotVal && todayOHLC.low > pivotVal) {
+              } else if (todayHL.high > pivotVal && todayHL.low > pivotVal) {
                 row.classList.add("pivotRed");
               }
             }
@@ -208,7 +207,7 @@
           for (let r = 1; r < table.rows.length; r++) {
             const row = table.rows[r];
             const val = parseFloat(row.cells[1].innerText);
-            if (val <= todayOHLC.high && val >= todayOHLC.low) {
+            if (val <= todayHL.high && val >= todayHL.low) {
               row.classList.add("band");
             }
           }
@@ -219,19 +218,6 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-      // Show both dates at top
-      const today = new Date();
-      const formattedToday = today.getFullYear() + "-" +
-                             String(today.getMonth()+1).padStart(2,"0") + "-" +
-                             String(today.getDate()).padStart(2,"0");
-      const yesterday = new Date(today);
-      yesterday.setDate(today.getDate() - 1);
-      const formattedYesterday = yesterday.getFullYear() + "-" +
-                                 String(yesterday.getMonth()+1).padStart(2,"0") + "-" +
-                                 String(yesterday.getDate()).padStart(2,"0");
-      document.getElementById("dateHeader").innerText =
-        "Pivot Date: " + formattedYesterday + " | Today: " + formattedToday;
-
       (async function loop() {
         await updateSlider();
         setTimeout(loop, 5000); // refresh every 5 seconds
