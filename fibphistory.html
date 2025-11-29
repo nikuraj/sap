@@ -172,9 +172,6 @@
       yesterday.setDate(today.getDate() - 1);
       const formattedYesterday = yesterday.getFullYear() + "-" + String(yesterday.getMonth()+1).padStart(2,"0") + "-" + String(yesterday.getDate()).padStart(2,"0");
       document.getElementById("dateHeader").innerText = "Pivot Date: " + formattedYesterday + " | Today: " + formattedToday;
-
-      (async function loop() {
-        await updateSlider();
       (async function loop() {
         await updateSlider();
         setTimeout(loop, 5000); // refresh every 5 seconds
