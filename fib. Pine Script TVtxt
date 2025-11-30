@@ -1,0 +1,154 @@
+//@version=5
+indicator("Nik Fab", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// === Inputs: individual toggles for Today levels ===
+showPivotToday = input.bool(true, "Pivot (Today)")
+showR1Today    = input.bool(true, "R1 Today")
+showR2Today    = input.bool(true, "R2 Today")
+showR3Today    = input.bool(true, "R3 Today")
+showR4Today    = input.bool(true, "R4 Today")
+showR5Today    = input.bool(false,"R5 Today")
+showR6Today    = input.bool(false,"R6 Today")
+showS1Today    = input.bool(true, "S1 Today")
+showS2Today    = input.bool(true, "S2 Today")
+showS3Today    = input.bool(true, "S3 Today")
+showS4Today    = input.bool(true, "S4 Today")
+showS5Today    = input.bool(false,"S5 Today")
+showS6Today    = input.bool(false,"S6 Today")
+
+// === Inputs: individual toggles for Next Day levels ===
+showPivotNext = input.bool(true, "Pivot (Next Day)")
+showR1Next    = input.bool(true, "R1 Next Day")
+showR2Next    = input.bool(true, "R2 Next Day")
+showR3Next    = input.bool(true, "R3 Next Day")
+showR4Next    = input.bool(true, "R4 Next Day")
+showR5Next    = input.bool(false,"R5 Next Day")
+showR6Next    = input.bool(false,"R6 Next Day")
+showS1Next    = input.bool(true, "S1 Next Day")
+showS2Next    = input.bool(true, "S2 Next Day")
+showS3Next    = input.bool(true, "S3 Next Day")
+showS4Next    = input.bool(true, "S4 Next Day")
+showS5Next    = input.bool(false,"S5 Next Day")
+showS6Next    = input.bool(false,"S6 Next Day")
+
+// === Inputs: line colors ===
+colorPivotToday = input.color(color.yellow, "Pivot (Today)")
+colorRToday     = input.color(color.red,    "Resistance (Today)")
+colorSToday     = input.color(color.green,  "Support (Today)")
+
+colorPivotNext  = input.color(color.new(color.yellow, 50), "Pivot (Next Day)")
+colorRNext      = input.color(color.new(color.red, 50),    "Resistance (Next Day)")
+colorSNext      = input.color(color.new(color.green, 50),  "Support (Next Day)")
+
+// === Previous day OHLC ===
+ph = request.security(syminfo.tickerid, "D", high[1])
+pl = request.security(syminfo.tickerid, "D", low[1])
+pc = request.security(syminfo.tickerid, "D", close[1])
+
+// === Today's OHLC (for next-day) ===
+th = request.security(syminfo.tickerid, "D", high)
+tl = request.security(syminfo.tickerid, "D", low)
+tc = request.security(syminfo.tickerid, "D", close)
+
+// === Pivot calculation function ===
+calcPivot(h, l, c) =>
+    p = (h + l + c)/3
+    r = h - l
+    arr = array.new_float()
+    array.push(arr, p)           // Pivot
+    array.push(arr, p + r*0.382) // R1
+    array.push(arr, p + r*0.618) // R2
+    array.push(arr, p + r*1.0)   // R3
+    array.push(arr, p + r*1.382) // R4
+    array.push(arr, p + r*1.618) // R5
+    array.push(arr, p + r*2.0)   // R6
+    array.push(arr, p - r*0.382) // S1
+    array.push(arr, p - r*0.618) // S2
+    array.push(arr, p - r*1.0)   // S3
+    array.push(arr, p - r*1.382) // S4
+    array.push(arr, p - r*1.618) // S5
+    array.push(arr, p - r*2.0)   // S6
+    arr
+
+todayLevels = calcPivot(ph, pl, pc)
+nextLevels  = calcPivot(th, tl, tc)
+
+// === Day timestamps ===
+dayStart     = time("D")
+dayEnd       = dayStart + 24*60*60*1000 - 1
+nextDayStart = dayStart + 24*60*60*1000
+nextDayEnd   = dayStart + 48*60*60*1000 - 1
+
+// === Detect first bar of day ===
+isNewDay = ta.change(time("D")) != 0
+
+// === Arrays to track lines/labels ===
+var line[]  lines  = array.new_line()
+var label[] labels = array.new_label()
+
+// === Flag to draw next-day lines only once ===
+var bool nextDayDrawn = false
+
+// === Draw line + left label helper ===
+makeLine(_start, _end, _price, _txt, _col, _show) =>
+    if _show
+        l = line.new(_start, _price, _end, _price, xloc=xloc.bar_time, extend=extend.none, color=_col, width=1)
+        array.push(lines, l)
+        lb = label.new(_start, _price, _txt, xloc=xloc.bar_time, yloc=yloc.price,
+                       style=label.style_label_left, textcolor=color.white, color=color.new(_col,0), size=size.small)
+        array.push(labels, lb)
+
+// === Draw today's levels at first bar of day ===
+if isNewDay
+    showToday = array.new_bool()
+    array.push(showToday, showPivotToday)
+    array.push(showToday, showR1Today)
+    array.push(showToday, showR2Today)
+    array.push(showToday, showR3Today)
+    array.push(showToday, showR4Today)
+    array.push(showToday, showR5Today)
+    array.push(showToday, showR6Today)
+    array.push(showToday, showS1Today)
+    array.push(showToday, showS2Today)
+    array.push(showToday, showS3Today)
+    array.push(showToday, showS4Today)
+    array.push(showToday, showS5Today)
+    array.push(showToday, showS6Today)
+
+    for i=0 to 12
+        txt = i==0 ? "Pivot" : i<=6 ? "R"+str.tostring(i) : "S"+str.tostring(i-6)
+        col = i==0 ? colorPivotToday : i<=6 ? colorRToday : colorSToday
+        makeLine(dayStart, dayEnd, array.get(todayLevels,i), txt, col, array.get(showToday,i))
+    nextDayDrawn := false
+
+// === Draw next day's levels only once ===
+if barstate.isconfirmed and not nextDayDrawn
+    showNext = array.new_bool()
+    array.push(showNext, showPivotNext)
+    array.push(showNext, showR1Next)
+    array.push(showNext, showR2Next)
+    array.push(showNext, showR3Next)
+    array.push(showNext, showR4Next)
+    array.push(showNext, showR5Next)
+    array.push(showNext, showR6Next)
+    array.push(showNext, showS1Next)
+    array.push(showNext, showS2Next)
+    array.push(showNext, showS3Next)
+    array.push(showNext, showS4Next)
+    array.push(showNext, showS5Next)
+    array.push(showNext, showS6Next)
+
+    for i=0 to 12
+        level = array.get(nextLevels, i)
+        showLevel = array.get(showNext, i)
+        txt = i==0 ? "Next Pivot" : i<=6 ? "Next R"+str.tostring(i) : "Next S"+str.tostring(i-6)
+        col = i==0 ? colorPivotNext : i<=6 ? colorRNext : colorSNext
+        if showLevel
+            makeLine(nextDayStart, nextDayEnd, level, txt, col, true)
+    nextDayDrawn := true
+
+// === Cleanup to avoid hitting limits ===
+if array.size(lines) > 480
+    line.delete(array.shift(lines))
+if array.size(labels) > 480
+    label.delete(array.shift(labels))
