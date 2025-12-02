@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pivot Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    table { border-collapse: collapse; width: 90%; margin: 20px auto; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    .red { background-color: #ffcccc; }
+    .green { background-color: #ccffcc; }
+    .yellow { background-color: #ffffcc; }
+  </style>
+</head>
+<body>
+  <h2>Phase 1: Pre-Close Dashboard</h2>
+  <table id="phase1">
+    <tr><th>Ticker</th><th>Pivot</th><th>High</th><th>Low</th><th>Status</th></tr>
+  </table>
+
+  <h2>Phase 2: Pre-Open Dashboard</h2>
+  <table id="phase2">
+    <tr><th>Ticker</th><th>Pivot</th><th>Pre-Market Price</th></tr>
+  </table>
+
+<script>
+const tickers = ["NVDA","AMD","TSLA","META","AVGO","NFLX","ADBE","NOW","SHOP","SNOW","AAPL","AMZN"];
+
+// Example function to fetch Yahoo Finance data (you’ll adapt for OHLC + premarket)
+async function fetchData(ticker) {
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return data.quoteResponse.result[0];
+}
+
+async function buildDashboard() {
+  for (let t of tickers) {
+    const q = await fetchData(t);
+
+    // Example values (replace with proper OHLC from Yahoo API)
+    const high = q.regularMarketDayHigh;
+    const low = q.regularMarketDayLow;
+    const close = q.regularMarketPreviousClose;
+    const pivot = (high + low + close) / 3;
+
+    // Phase 1 logic
+    let statusClass = "yellow";
+    let statusText = "Within Range";
+    if (pivot < low) { statusClass = "red"; statusText = "Below Low"; }
+    else if (pivot > high) { statusClass = "green"; statusText = "Above High"; }
+
+    document.getElementById("phase1").innerHTML +=
+      `<tr><td>${t}</td><td>${pivot.toFixed(2)}</td><td>${high}</td><td>${low}</td><td class="${statusClass}">${statusText}</td></tr>`;
+
+    // Phase 2 logic (pre-market price)
+    const preMarket = q.preMarketPrice || "N/A";
+    document.getElementById("phase2").innerHTML +=
+      `<tr><td>${t}</td><td>${pivot.toFixed(2)}</td><td>${preMarket}</td></tr>`;
+  }
+}
+
+buildDashboard();
+</script>
+</body>
+</html>
