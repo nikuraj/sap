@@ -5,15 +5,15 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-color: #121212; /* dark gray/black background */
-      color: #e0e0e0;            /* light gray text */
+      background-color: #121212; /* dark background */
+      color: #e0e0e0;            /* light text */
     }
     h2 { text-align: center; color: #ffffff; }
     table {
       border-collapse: collapse;
       width: 90%;
       margin: 20px auto;
-      background-color: #1e1e1e; /* slightly lighter gray for table */
+      background-color: #1e1e1e; /* dark gray table */
     }
     th, td {
       border: 1px solid #444;
@@ -42,19 +42,40 @@ const tickers = ["NVDA","AMD","TSLA","META","AVGO","NFLX","ADBE","NOW","SHOP","S
 
 async function fetchData(ticker) {
   const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return data.quoteResponse.result[0];
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    return data.quoteResponse.result[0];
+  } catch (e) {
+    console.error("Error fetching data for", ticker, e);
+    return null;
+  }
 }
 
 async function buildDashboard() {
   for (let t of tickers) {
     const q = await fetchData(t);
 
+    if (!q) {
+      document.getElementById("phase1").innerHTML +=
+        `<tr><td>${t}</td><td colspan="4">No data from API</td></tr>`;
+      document.getElementById("phase2").innerHTML +=
+        `<tr><td>${t}</td><td colspan="2">No data from API</td></tr>`;
+      continue;
+    }
+
     const high = q.regularMarketDayHigh;
-    const low = q.regularMarketDayLow;
+    const low  = q.regularMarketDayLow;
     const close = q.regularMarketPreviousClose;
-    const pivot = (high + low + close) / 3;
+    const pivot = (high && low && close) ? (high + low + close) / 3 : null;
+
+    if (!high || !low || !close || !pivot) {
+      document.getElementById("phase1").innerHTML +=
+        `<tr><td>${t}</td><td colspan="4">No values returned</td></tr>`;
+      document.getElementById("phase2").innerHTML +=
+        `<tr><td>${t}</td><td colspan="2">No values returned</td></tr>`;
+      continue;
+    }
 
     // Phase 1 logic
     let statusClass = "yellow";
