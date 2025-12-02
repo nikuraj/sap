@@ -3,12 +3,27 @@
 <head>
   <title>Pivot Dashboard</title>
   <style>
-    body { font-family: Arial, sans-serif; }
-    table { border-collapse: collapse; width: 90%; margin: 20px auto; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    .red { background-color: #ffcccc; }
-    .green { background-color: #ccffcc; }
-    .yellow { background-color: #ffffcc; }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #121212; /* dark gray/black background */
+      color: #e0e0e0;            /* light gray text */
+    }
+    h2 { text-align: center; color: #ffffff; }
+    table {
+      border-collapse: collapse;
+      width: 90%;
+      margin: 20px auto;
+      background-color: #1e1e1e; /* slightly lighter gray for table */
+    }
+    th, td {
+      border: 1px solid #444;
+      padding: 8px;
+      text-align: center;
+    }
+    th { background-color: #333; color: #fff; }
+    .red { background-color: #ff4c4c; color: #000; }
+    .green { background-color: #4caf50; color: #000; }
+    .yellow { background-color: #ffeb3b; color: #000; }
   </style>
 </head>
 <body>
@@ -25,7 +40,6 @@
 <script>
 const tickers = ["NVDA","AMD","TSLA","META","AVGO","NFLX","ADBE","NOW","SHOP","SNOW","AAPL","AMZN"];
 
-// Example function to fetch Yahoo Finance data (you’ll adapt for OHLC + premarket)
 async function fetchData(ticker) {
   const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`;
   const res = await fetch(url);
@@ -37,7 +51,6 @@ async function buildDashboard() {
   for (let t of tickers) {
     const q = await fetchData(t);
 
-    // Example values (replace with proper OHLC from Yahoo API)
     const high = q.regularMarketDayHigh;
     const low = q.regularMarketDayLow;
     const close = q.regularMarketPreviousClose;
@@ -52,7 +65,7 @@ async function buildDashboard() {
     document.getElementById("phase1").innerHTML +=
       `<tr><td>${t}</td><td>${pivot.toFixed(2)}</td><td>${high}</td><td>${low}</td><td class="${statusClass}">${statusText}</td></tr>`;
 
-    // Phase 2 logic (pre-market price)
+    // Phase 2 logic
     const preMarket = q.preMarketPrice || "N/A";
     document.getElementById("phase2").innerHTML +=
       `<tr><td>${t}</td><td>${pivot.toFixed(2)}</td><td>${preMarket}</td></tr>`;
