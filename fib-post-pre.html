@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Pivot n Dashboard</title>
+  <title>Pivot Dashboard</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       background-color: #121212; /* dark background */
       color: #e0e0e0;            /* light text */
     }
-    h2 { text-align: center; color: #ffffff; }
+    h2, h3 { text-align: center; color: #ffffff; }
     table {
       border-collapse: collapse;
       width: 90%;
@@ -24,56 +24,106 @@
     .red { background-color: #ff4c4c; color: #000; }
     .green { background-color: #4caf50; color: #000; }
     .yellow { background-color: #ffeb3b; color: #000; }
+    .gray { background-color: #999; color: #000; }
   </style>
 </head>
 <body>
+  <h2>Pivot Dashboard</h2>
+  <h3 id="timestamp"></h3>
+
   <h2>Phase 1: Pre-Close Dashboard</h2>
   <table id="phase1">
-    <tr><th>Ticker</th><th>Pivot</th><th>High</th><th>Low</th><th>Status</th></tr>
+    <tr><th>Ticker</th><th>Pivot</th><th>High</th><th>Low</th><th>Status</th><th>Source</th></tr>
   </table>
 
   <h2>Phase 2: Pre-Open Dashboard</h2>
   <table id="phase2">
-    <tr><th>Ticker</th><th>Pivot</th><th>Pre-Market Price</th></tr>
+    <tr><th>Ticker</th><th>Pivot</th><th>Pre-Market Price</th><th>Source</th></tr>
   </table>
 
 <script>
 const tickers = ["NVDA","AMD","TSLA","META","AVGO","NFLX","ADBE","NOW","SHOP","SNOW","AAPL","AMZN"];
+const alphaKey = "4EP82E7XCEBJM4LM";   // <-- insert your Alpha Vantage key
+const finnhubKey = "d4nksmhr01qk2nucg22gd4nksmhr01qk2nucg230"; // <-- insert your Finnhub key
+
+document.getElementById("timestamp").innerText = "Last refreshed: " + new Date().toLocaleString();
 
 async function fetchData(ticker) {
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`;
+  // 1. Try Yahoo
   try {
-    const res = await fetch(url);
-    const data = await res.json();
-    return data.quoteResponse.result[0];
-  } catch (e) {
-    console.error("Error fetching data for", ticker, e);
-    return null;
-  }
+    const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`;
+    let res = await fetch(yahooUrl);
+    let data = await res.json();
+    if (data.quoteResponse.result.length > 0) {
+      return { source: "Yahoo", data: data.quoteResponse.result[0] };
+    }
+  } catch (e) { console.warn("Yahoo failed for", ticker); }
+
+  // 2. Try Alpha Vantage
+  try {
+    const alphaUrl = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${alphaKey}`;
+    let res = await fetch(alphaUrl);
+    let data = await res.json();
+    if (data["Global Quote"]) {
+      return { source: "AlphaVantage", data: data["Global Quote"] };
+    }
+  } catch (e) { console.warn("Alpha Vantage failed for", ticker); }
+
+  // 3. Try Finnhub
+  try {
+    const finnhubUrl = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${finnhubKey}`;
+    let res = await fetch(finnhubUrl);
+    let data = await res.json();
+    if (data.c) { // 'c' = current price
+      return { source: "Finnhub", data: data };
+    }
+  } catch (e) { console.warn("Finnhub failed for", ticker); }
+
+  return null;
 }
 
 async function buildDashboard() {
   for (let t of tickers) {
-    const q = await fetchData(t);
+    const result = await fetchData(t);
 
-    if (!q) {
+    if (!result) {
       document.getElementById("phase1").innerHTML +=
-        `<tr><td>${t}</td><td colspan="4">No data from API</td></tr>`;
+        `<tr><td>${t}</td><td colspan="5">No data from any API</td></tr>`;
       document.getElementById("phase2").innerHTML +=
-        `<tr><td>${t}</td><td colspan="2">No data from API</td></tr>`;
+        `<tr><td>${t}</td><td colspan="3">No data from any API</td></tr>`;
       continue;
     }
 
-    const high = q.regularMarketDayHigh;
-    const low  = q.regularMarketDayLow;
-    const close = q.regularMarketPreviousClose;
-    const pivot = (high && low && close) ? (high + low + close) / 3 : null;
+    let source = result.source;
+    let high, low, close, pivot, preMarket;
 
-    if (!high || !low || !close || !pivot) {
+    if (source === "Yahoo") {
+      high = result.data.regularMarketDayHigh || result.data.regularMarketPrice;
+      low  = result.data.regularMarketDayLow  || result.data.regularMarketPrice;
+      close = result.data.regularMarketPreviousClose;
+      pivot = (high && low && close) ? (high + low + close) / 3 : null;
+      preMarket = result.data.preMarketPrice || "N/A";
+    }
+    else if (source === "AlphaVantage") {
+      high = parseFloat(result.data["03. high"]);
+      low  = parseFloat(result.data["04. low"]);
+      close = parseFloat(result.data["08. previous close"]);
+      pivot = (high && low && close) ? (high + low + close) / 3 : null;
+      preMarket = result.data["05. price"] || "N/A";
+    }
+    else if (source === "Finnhub") {
+      high = result.data.h;
+      low  = result.data.l;
+      close = result.data.pc; // previous close
+      pivot = (high && low && close) ? (high + low + close) / 3 : null;
+      preMarket = result.data.c || "N/A"; // current price
+    }
+
+    if (!pivot) {
       document.getElementById("phase1").innerHTML +=
-        `<tr><td>${t}</td><td colspan="4">No values returned</td></tr>`;
+        `<tr><td>${t}</td><td colspan="5">No values returned (${source})</td></tr>`;
       document.getElementById("phase2").innerHTML +=
-        `<tr><td>${t}</td><td colspan="2">No values returned</td></tr>`;
+        `<tr><td>${t}</td><td colspan="3">No values returned (${source})</td></tr>`;
       continue;
     }
 
@@ -84,12 +134,12 @@ async function buildDashboard() {
     else if (pivot > high) { statusClass = "green"; statusText = "Above High"; }
 
     document.getElementById("phase1").innerHTML +=
-      `<tr><td>${t}</td><td>${pivot.toFixed(2)}</td><td>${high}</td><td>${low}</td><td class="${statusClass}">${statusText}</td></tr>`;
+      `<tr><td>${t}</td><td>${pivot.toFixed(2)}</td><td>${high}</td><td>${low}</td><td class="${statusClass}">${statusText}</td><td>${source}</td></tr>`;
 
     // Phase 2 logic
-    const preMarket = q.preMarketPrice || "N/A";
+    let pmClass = (preMarket === "N/A") ? "gray" : "";
     document.getElementById("phase2").innerHTML +=
-      `<tr><td>${t}</td><td>${pivot.toFixed(2)}</td><td>${preMarket}</td></tr>`;
+      `<tr><td>${t}</td><td>${pivot.toFixed(2)}</td><td class="${pmClass}">${preMarket}</td><td>${source}</td></tr>`;
   }
 }
 
