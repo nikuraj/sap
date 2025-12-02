@@ -1,19 +1,19 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html>
 <head>
   <title>Pivot Dashboard</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-color: #121212; /* dark background */
-      color: #e0e0e0;            /* light text */
+      background-color: #121212;
+      color: #e0e0e0;
     }
     h2, h3 { text-align: center; color: #ffffff; }
     table {
       border-collapse: collapse;
       width: 95%;
       margin: 20px auto;
-      background-color: #1e1e1e; /* dark gray table */
+      background-color: #1e1e1e;
     }
     th, td {
       border: 1px solid #444;
@@ -21,17 +21,17 @@
       text-align: center;
     }
     th { background-color: #333; color: #fff; }
-    .red { background-color: #ff4c4c; color: #000; }     /* Pivot below low -> price above pivot */
-    .green { background-color: #4caf50; color: #000; }   /* Pivot above high -> price below pivot */
-    .yellow { background-color: #ffeb3b; color: #000; }  /* Pivot within today's range */
-    .gray { background-color: #999; color: #000; }       /* Missing data indicator */
+    .red { background-color: #ff4c4c; color: #000; }
+    .green { background-color: #4caf50; color: #000; }
+    .yellow { background-color: #ffeb3b; color: #000; }
+    .gray { background-color: #999; color: #000; }
     .legend { width: 95%; margin: 10px auto; font-size: 14px; color: #ccc; }
     .legend span { display: inline-block; margin-right: 15px; padding: 3px 8px; border-radius: 3px; }
     .legend .red { background-color: #ff4c4c; }
     .legend .green { background-color: #4caf50; }
     .legend .yellow { background-color: #ffeb3b; }
     .legend .gray { background-color: #999; }
-    .note { width: 95%; margin: 5px auto; font-size: 12px; color: #aaa; text-align: center; }
+    .small { font-size: 12px; color: #bbb; }
   </style>
 </head>
 <body>
@@ -39,156 +39,173 @@
   <h3 id="timestamp"></h3>
 
   <div class="legend">
-    <span class="red">Pivot &lt; Today Low (price stayed above pivot)</span>
-    <span class="green">Pivot &gt; Today High (price stayed below pivot)</span>
-    <span class="yellow">Pivot within Today High–Low (price traversed pivot zone)</span>
-    <span class="gray">N/A or missing</span>
+    <span class="red">Pivot &lt; Today Low</span>
+    <span class="green">Pivot &gt; Today High</span>
+    <span class="yellow">Pivot within Today High–Low</span>
+    <span class="gray">Missing/Unavailable</span>
   </div>
 
   <h2>Phase 1: Pre-Close Dashboard</h2>
   <table id="phase1">
-    <tr><th>Ticker</th><th>Yesterday Pivot</th><th>Yesterday OHLC</th><th>Today High</th><th>Today Low</th><th>Status</th><th>Source</th></tr>
+    <tr>
+      <th>Ticker</th>
+      <th>Yesterday Pivot</th>
+      <th>Pivot Date</th>
+      <th>Yesterday OHLC</th>
+      <th>Today High</th>
+      <th>Today Low</th>
+      <th>Status</th>
+      <th>Source</th>
+    </tr>
   </table>
 
   <h2>Phase 2: Pre-Open Dashboard</h2>
   <table id="phase2">
-    <tr><th>Ticker</th><th>Yesterday Pivot</th><th>Pre-Market / Current Price</th><th>Source</th></tr>
+    <tr>
+      <th>Ticker</th>
+      <th>Yesterday Pivot</th>
+      <th>Pivot Date</th>
+      <th>Pre-market / Current Price</th>
+      <th>Source</th>
+    </tr>
   </table>
-
-  <div class="note">Alpha Vantage free tier is 5 calls/minute. This page throttles requests automatically.</div>
 
 <script>
 const tickers = ["NVDA","AMD","TSLA","META","AVGO","NFLX","ADBE","NOW","SHOP","SNOW","AAPL","AMZN"];
-const alphaKey = "YOUR_ALPHA_KEY";   // <-- insert your Alpha Vantage key
-const finnhubKey = "YOUR_FINNHUB_KEY"; // optional fallback (kept for future use)
+const alphaKey = "4EP82E7XCEBJM4LM";   // your Alpha Vantage key
+const finnhubKey = "d4nksmhr01qk2nucg22gd4nksmhr01qk2nucg230"; // your Finnhub key
+
 document.getElementById("timestamp").innerText = "Last refreshed: " + new Date().toLocaleString();
 
-/*
-  We need:
-  - Yesterday OHLC for pivot: TIME_SERIES_DAILY (Alpha)
-  - Today's High/Low: GLOBAL_QUOTE (Alpha)
-  - Pre-market/current price: GLOBAL_QUOTE "05. price" (Alpha). If not available, we’ll show N/A.
+// Utility: pick previous trading day from Alpha daily series
+function getPreviousTradingDay(series) {
+  const dates = Object.keys(series).sort((a,b) => new Date(b) - new Date(a));
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0];
+  for (let i = 0; i < dates.length; i++) {
+    if (dates[i] < todayStr) return dates[i];
+  }
+  return dates[1] || null;
+}
 
-  Rate limiting:
-  - 2 calls per ticker (DAILY + GLOBAL_QUOTE) -> 24 calls for 12 tickers.
-  - We throttle to ~5 per minute using a simple queue and delay.
-*/
-
-const delayMs = 12500; // ~12.5s between requests ≈ 4-5 calls/min
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-async function fetchDaily(ticker) {
+// Fetch yesterday OHLC for pivot
+async function fetchDailyPivotAlpha(ticker) {
   const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&apikey=${alphaKey}`;
   try {
     const res = await fetch(url);
     const data = await res.json();
     const series = data["Time Series (Daily)"];
     if (!series) return null;
-
-    const dates = Object.keys(series).sort((a,b) => new Date(b) - new Date(a));
-    // latest (today or most recent trading day) and previous day
-    const latest = series[dates[0]];
-    const prev = series[dates[1]]; // yesterday
-    if (!prev) return null;
-
+    const prevDate = getPreviousTradingDay(series);
+    if (!prevDate) return null;
+    const prev = series[prevDate];
     const yHigh = parseFloat(prev["2. high"]);
     const yLow  = parseFloat(prev["3. low"]);
     const yClose = parseFloat(prev["4. close"]);
-    const pivot = (yHigh + yLow + yClose) / 3;
-
-    return { yHigh, yLow, yClose, pivot, source: "AlphaVantage DAILY" };
-  } catch (e) {
-    console.warn("Alpha DAILY failed for", ticker, e);
-    return null;
-  }
+    if (![yHigh,yLow,yClose].every(v => isFinite(v))) return null;
+    const pivot = (yHigh + yLow + yClose)/3;
+    return { pivot, yHigh, yLow, yClose, pivotDate: prevDate, source: "AlphaVantage DAILY" };
+  } catch(e){ return null; }
 }
 
+// Fetch today’s high/low/current from Yahoo, Alpha, or Finnhub
 async function fetchQuote(ticker) {
-  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${alphaKey}`;
+  // 1. Yahoo
   try {
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.quoteResponse.result.length > 0) {
+      const q = data.quoteResponse.result[0];
+      return {
+        todayHigh: q.regularMarketDayHigh,
+        todayLow: q.regularMarketDayLow,
+        price: q.preMarketPrice || q.regularMarketPrice,
+        source: "Yahoo"
+      };
+    }
+  } catch(e){}
+
+  // 2. Alpha Vantage
+  try {
+    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${alphaKey}`;
     const res = await fetch(url);
     const data = await res.json();
     const q = data["Global Quote"];
-    if (!q) return null;
-    const todayHigh = parseFloat(q["03. high"]);
-    const todayLow  = parseFloat(q["04. low"]);
-    const price     = q["05. price"] ? parseFloat(q["05. price"]) : null;
-    return { todayHigh, todayLow, price, source: "AlphaVantage QUOTE" };
-  } catch (e) {
-    console.warn("Alpha QUOTE failed for", ticker, e);
-    return null;
-  }
+    if (q) {
+      return {
+        todayHigh: parseFloat(q["03. high"]),
+        todayLow: parseFloat(q["04. low"]),
+        price: parseFloat(q["05. price"]),
+        source: "AlphaVantage QUOTE"
+      };
+    }
+  } catch(e){}
+
+  // 3. Finnhub
+  try {
+    const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${finnhubKey}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.c) {
+      return {
+        todayHigh: data.h,
+        todayLow: data.l,
+        price: data.c,
+        source: "Finnhub"
+      };
+    }
+  } catch(e){}
+
+  return null;
 }
 
 async function buildDashboard() {
   const phase1 = document.getElementById("phase1");
   const phase2 = document.getElementById("phase2");
 
-  for (let i = 0; i < tickers.length; i++) {
-    const t = tickers[i];
-
-    // Throttle before each pair of requests
-    if (i > 0) await sleep(delayMs);
-
-    // Fetch yesterday OHLC for pivot
-    const daily = await fetchDaily(t);
-    if (!daily) {
-      phase1.innerHTML += `<tr><td>${t}</td><td colspan="6" class="gray">No daily data returned (Alpha)</td></tr>`;
-      phase2.innerHTML += `<tr><td>${t}</td><td class="gray">N/A</td><td class="gray">N/A</td><td>AlphaVantage</td></tr>`;
-      continue;
-    }
-
-    // Throttle before second request
-    await sleep(delayMs);
-
-    // Fetch today's high/low and pre-market/current price
+  for (let t of tickers) {
+    const daily = await fetchDailyPivotAlpha(t);
     const quote = await fetchQuote(t);
-    if (!quote) {
-      phase1.innerHTML += `<tr><td>${t}</td><td>${daily.pivot.toFixed(2)}</td><td>${daily.yHigh.toFixed(2)} / ${daily.yLow.toFixed(2)} / ${daily.yClose.toFixed(2)}</td><td class="gray">N/A</td><td class="gray">N/A</td><td class="gray">No quote</td><td>${daily.source}</td></tr>`;
-      phase2.innerHTML += `<tr><td>${t}</td><td>${daily.pivot.toFixed(2)}</td><td class="gray">N/A</td><td>${daily.source}</td></tr>`;
+
+    if (!daily) {
+      phase1.innerHTML += `<tr><td>${t}</td><td colspan="7" class="gray">No daily data</td></tr>`;
+      phase2.innerHTML += `<tr><td>${t}</td><td class="gray">N/A</td><td class="gray">N/A</td><td class="gray">N/A</td><td>AlphaVantage DAILY</td></tr>`;
       continue;
     }
 
-    // Phase 1 coloring
-    let statusClass = "yellow";
-    let statusText = "Within Range";
-    const th = quote.todayHigh;
-    const tl = quote.todayLow;
-
-    // If today’s high/low missing, mark gray
-    if (!isFinite(th) || !isFinite(tl)) {
-      statusClass = "gray";
-      statusText = "Missing today range";
-    } else {
+    const th = quote && isFinite(quote.todayHigh) ? quote.todayHigh : null;
+    const tl = quote && isFinite(quote.todayLow) ? quote.todayLow : null;
+    let statusClass = "gray";
+    let statusText = "Missing today range";
+    if (th !== null && tl !== null) {
       if (daily.pivot < tl) { statusClass = "red"; statusText = "Pivot < Today Low"; }
       else if (daily.pivot > th) { statusClass = "green"; statusText = "Pivot > Today High"; }
       else { statusClass = "yellow"; statusText = "Pivot within Today High–Low"; }
     }
 
-    // Phase 1 row
     phase1.innerHTML += `
       <tr>
         <td>${t}</td>
         <td>${daily.pivot.toFixed(2)}</td>
+        <td class="small">${daily.pivotDate}</td>
         <td>${daily.yHigh.toFixed(2)} / ${daily.yLow.toFixed(2)} / ${daily.yClose.toFixed(2)}</td>
-        <td>${isFinite(th) ? th.toFixed(2) : "N/A"}</td>
-        <td>${isFinite(tl) ? tl.toFixed(2) : "N/A"}</td>
+                <td>${tl !== null ? tl.toFixed(2) : "N/A"}</td>
         <td class="${statusClass}">${statusText}</td>
-        <td>${daily.source} + ${quote.source}</td>
+        <td>${daily.source}${quote ? " + " + quote.source : ""}</td>
       </tr>
     `;
 
-    // Phase 2 row (pre-market/current price)
-    const pm = isFinite(quote.price) ? quote.price.toFixed(2) : "N/A";
-    const pmClass = isFinite(quote.price) ? "" : "gray";
-
+    // Phase 2 row
+    const pm = quote && isFinite(quote.price) ? quote.price.toFixed(2) : "N/A";
+    const pmClass = (pm === "N/A") ? "gray" : "";
     phase2.innerHTML += `
       <tr>
         <td>${t}</td>
         <td>${daily.pivot.toFixed(2)}</td>
+        <td class="small">${daily.pivotDate}</td>
         <td class="${pmClass}">${pm}</td>
-        <td>${quote.source}</td>
+        <td>${quote ? quote.source : "No source"}</td>
       </tr>
     `;
   }
