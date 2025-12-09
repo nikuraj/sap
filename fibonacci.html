@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Camarilla Levels and Alerts</title>
+  <title></title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #121212; color: #e0e0e0; }
     .container { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 40px; }
@@ -14,7 +14,6 @@
     .support { background: #225522; }
     .price { background: #444466; font-weight: bold; color: #fff; }
     .highlight { background-color: yellow !important; color: black !important; }
-    .cpr { background: #4a4a2a; } /* Style for BC, TC */
 
     #alertsWrapper {
       background: #1e1e1e; padding: 10px;
@@ -51,10 +50,9 @@
     <table id="alertsTable">
       <tr><th>Ticker</th><th>Level</th><th>Price</th><th>Time</th></tr>
     </table>
-    <button onclick="resetAlerts()">Clear Alerts</button>
   </div>
 
-  <script type="text/javascript" src="s3.tradingview.com"></script>
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
   <script>
     // TradingView charts
     new TradingView.widget({ "width": 480, "height": 320, "symbol": "NASDAQ:AAPL", "interval": "D", "theme": "dark", "container_id": "tv_aapl" });
@@ -69,23 +67,16 @@
       Notification.requestPermission();
     }
 
-    // Use a reliable CORS proxy
     function proxyFetch(url) {
-      const proxyUrl = "api.allorigins.win" + encodeURIComponent(url);
+      const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
       return fetch(proxyUrl).then(res => res.json());
     }
 
-    // Function updated with TC, BC, and PreviousDayLow
     function calculateLevels(high, low, close) {
       const pp = (high + low + close) / 3;
-      const bc = (high + low) / 2;    // Bottom Central Pivot
-      const tc = (2 * pp) - bc;        // Top Central Pivot
       const range = high - low;
       return {
         Pivot: pp.toFixed(2),
-        BC: bc.toFixed(2),
-        TC: tc.toFixed(2),
-        PreviousDayLow: low.toFixed(2), // Previous Day Low
         R1: (pp + range * 0.382).toFixed(2),
         R2: (pp + range * 0.618).toFixed(2),
         R3: (pp + range * 1.000).toFixed(2),
@@ -102,13 +93,11 @@
     }
 
     function renderTable(symbol, levels) {
-      // Sort entries correctly by value descending
       let entries = Object.entries(levels).sort((a,b) => parseFloat(b[1]) - parseFloat(a[1]));
       let html = `<table id="table_${symbol}"><tr><th>${symbol}</th><th>Price</th></tr>`;
       for (const [key, value] of entries) {
         let cls = "";
         if (key === "Pivot") cls = "pivot";
-        else if (key === "BC" || key === "TC") cls = "cpr";
         else if (key.startsWith("R")) cls = "resistance";
         else if (key.startsWith("S")) cls = "support";
         html += `<tr class="${cls}"><td>${key}</td><td>${value}</td></tr>`;
@@ -118,7 +107,7 @@
     }
 
     async function fetchOHLC(symbol) {
-      const url = `query1.finance.yahoo.com{symbol}?range=5d&interval=1d`;
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=5d&interval=1d`;
       const data = await proxyFetch(url);
       const result = data.chart.result[0];
       const ohlc = result.indicators.quote[0];
@@ -127,7 +116,7 @@
     }
 
     async function fetchCurrentPrice(symbol) {
-      const url = `query1.finance.yahoo.com{symbol}?interval=1m&range=1d`;
+      const url = `https://query1.finance.yahoo.com/v7/finance/chart/${symbol}?interval=1m&range=1d`;
       const data = await proxyFetch(url);
       const result = data?.chart?.result?.[0];
       const closes = result?.indicators?.quote?.[0]?.close || [];
@@ -155,9 +144,7 @@
           const oldRow = document.getElementById(`priceRow_${t}`);
           if (oldRow) oldRow.remove();
 
-          // Sort levels for price insertion logic
           let entries = Object.entries(levels).sort((a,b) => parseFloat(b[1]) - parseFloat(a[1]));
-
           let inserted = false;
           for (let i = 0; i < entries.length; i++) {
             const levelPrice = parseFloat(entries[i][1]);
@@ -172,7 +159,6 @@
             }
           }
           if (!inserted) {
-            // Insert at the top if price is above all R levels
             const row = table.insertRow(1);
             row.id = `priceRow_${t}`;
             row.className = "price";
@@ -181,16 +167,14 @@
 
           const rows = table.rows;
           for (let r = 1; r < rows.length; r++) {
-            const row = rows[r];
+                       const row = rows[r];
             if (row.id === `priceRow_${t}`) continue;
-            // Access cells correctly by index
             const cell = row.cells[1];
             if (!cell) continue;
             const levelPrice = parseFloat(cell.innerText);
             const levelName = row.cells[0].innerText;
             if (!isNaN(levelPrice)) {
               const alertKey = `${t}_${levelName}`;
-              // Simplified alert proximity check (e.g., within $1)
               if (Math.abs(price - levelPrice) <= 1.00) {
                 row.classList.add("highlight");
                 if (!firedAlerts.has(alertKey)) {
@@ -202,7 +186,7 @@
                   if ("Notification" in window && Notification.permission === "granted") {
                     new Notification(`ALERT: ${t}`, {
                       body: `Price ${Number(price).toFixed(2)} near ${levelName} (${levelPrice.toFixed(2)})`,
-                      icon: "static.thenounproject.com"
+                      icon: "https://static.thenounproject.com/png/2045037-200.png"
                     });
                   }
                 }
@@ -217,21 +201,18 @@
       }
     }
 
-    // Function to clear alerts log
-    function resetAlerts() {
-      firedAlerts.clear();
-      // Keep the header row intact
-      const alertsTable = document.getElementById("alertsTable");
-      alertsTable.innerHTML = "<tr><th>Ticker</th><th>Level</th><th>Price</th><th>Time</th></tr>";
-    }
-    
-    // Start the update loop when the page loads
     document.addEventListener("DOMContentLoaded", () => {
       (async function loop() {
         await updateSlider();
         setTimeout(loop, 5000); // refresh every 5 seconds
       })();
     });
+
+    function resetAlerts() {
+      firedAlerts.clear();
+      const alertsTable = document.getElementById("alertsTable");
+      alertsTable.innerHTML = "<tr><th>Ticker</th><th>Level</th><th>Price</th><th>Time</th></tr>";
+    }
   </script>
 </body>
 </html>
